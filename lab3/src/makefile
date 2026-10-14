@@ -1,7 +1,7 @@
 CC=gcc
-CFLAGS=-I.
+CFLAGS=-I. # Adds current directory to search for header files
 
-sequential_min_max : utils.o find_min_max.o utils.h find_min_max.h
+sequential_min_max : utils.o find_min_max.o utils.h find_min_max.h sequential_min_max.c
 	$(CC) -o sequential_min_max find_min_max.o utils.o sequential_min_max.c $(CFLAGS)
 
 parallel_min_max : utils.o find_min_max.o utils.h find_min_max.h parallel_min_max.c
@@ -10,8 +10,13 @@ parallel_min_max : utils.o find_min_max.o utils.h find_min_max.h parallel_min_ma
 utils.o : utils.h utils.c
 	$(CC) -o utils.o -c utils.c $(CFLAGS)
 
-find_min_max.o : utils.h find_min_max.h
+find_min_max.o : utils.h find_min_max.h find_min_max.c
 	$(CC) -o find_min_max.o -c find_min_max.c $(CFLAGS)
 
+detached_sequential : detached_sequential.c sequential_min_max
+	$(CC) $(CFLAGS) $< -o $@
+
 clean :
-	rm utils.o find_min_max.o sequential_min_max parallel_min_max
+	-rm utils.o find_min_max.o sequential_min_max parallel_min_max detached_sequential
+
+all : detached_sequential
