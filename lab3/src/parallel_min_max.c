@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -33,31 +34,38 @@ int main(int argc, char **argv) {
     int option_index = 0;
     int c = getopt_long(argc, argv, "f", options, &option_index);
 
-    if (c == -1) break;
+    if (c == -1) 
+      break;
 
     switch (c) {
       case 0:
         switch (option_index) {
           case 0:
             seed = atoi(optarg);
-            // your code here
-            // error handling
+            if (seed <= 0) {
+              printf("seed is a positive number\n");
+              return 1;
+            }
             break;
           case 1:
             array_size = atoi(optarg);
-            // your code here
-            // error handling
+            if (array_size <= 0) {
+              printf("array_size is a positive number\n");
+              return 1;
+            }
             break;
           case 2:
             pnum = atoi(optarg);
-            // your code here
-            // error handling
+             if (pnum <= 0) {
+              printf("pnum is a positive number\n.\n");
+              return 1;
+            }
             break;
           case 3:
             with_files = true;
             break;
 
-          defalut:
+          default:
             printf("Index %d is out of options\n", option_index);
         }
         break;
@@ -79,14 +87,43 @@ int main(int argc, char **argv) {
   }
 
   if (seed == -1 || array_size == -1 || pnum == -1) {
-    printf("Usage: %s --seed \"num\" --array_size \"num\" --pnum \"num\" \n",
+    printf("Usage: %s --seed \"num\" --array_size \"num\" --pnum \"num\" [--by_files | -f]\n",
            argv[0]);
     return 1;
   }
 
+  if (pnum > array_size) {
+    pnum = array_size;
+  }
+
   int *array = malloc(sizeof(int) * array_size);
+  if (array == NULL) {
+      printf("Failed to allocate memory for array\n");
+      return 2;
+  }
+  
   GenerateArray(array, array_size, seed);
+
   int active_child_processes = 0;
+
+  int (*pipes)[2] = NULL; 
+
+  if (!with_files) {
+    pipes = malloc(sizeof(int[2]) * pnum);
+    if (pipes == NULL) {
+      printf("Failed to allocate memory for pipes\n");
+      free(array);
+      return 2;
+    }
+    for (int i = 0; i < pnum; i++) {
+      if (pipe(pipes[i]) == -1) {
+        perror("pipe");
+        free(array);
+        free(pipes);
+        return 2;
+      }
+    }
+  }
 
   struct timeval start_time;
   gettimeofday(&start_time, NULL);
@@ -97,16 +134,43 @@ int main(int argc, char **argv) {
       // successful fork
       active_child_processes += 1;
       if (child_pid == 0) {
-        // child process
 
-        // parallel somehow
+        int chunk_size = array_size / pnum;
+        int start = i * chunk_size;
+        int end = (i == pnum - 1) ? array_size : (i + 1) * chunk_size;
+
+        struct MinMax local_min_max = GetMinMax(array, start, end);
 
         if (with_files) {
-          // use files here
+          char filename[32];
+          sprintf(filename, "child_%d.tmp", i);
+          FILE *f = fopen(filename, "wb");
+          if (f == NULL) {
+            perror("fopen child file");
+            free(array);
+            exit(1);
+          }
+          fwrite(&local_min_max, sizeof(struct MinMax), 1, f);
+          fclose(f);
         } else {
-          // use pipe here
+          close(pipes[i][0]); 
+          
+
+          if (write(pipes[i][1], &local_min_max, sizeof(struct MinMax)) == -1) {
+            perror("write to pipe");
+            close(pipes[i][1]);
+            free(array);
+            free(pipes);
+            exit(1);
+          }
+          
+          close(pipes[i][1]);
         }
-        return 0;
+
+        free(array);
+        if (!with_files) 
+          free(pipes);
+        exit(0);
       }
 
     } else {
@@ -115,9 +179,14 @@ int main(int argc, char **argv) {
     }
   }
 
-  while (active_child_processes > 0) {
-    // your code here
+  if (!with_files) {
+    for (int i = 0; i < pnum; i++) {
+      close(pipes[i][1]);
+    }
+  }
 
+  while (active_child_processes > 0) {
+    wait(NULL);
     active_child_processes -= 1;
   }
 
@@ -126,17 +195,32 @@ int main(int argc, char **argv) {
   min_max.max = INT_MIN;
 
   for (int i = 0; i < pnum; i++) {
-    int min = INT_MAX;
-    int max = INT_MIN;
+    struct MinMax local_min_max;
 
     if (with_files) {
-      // read from files
+      char filename[32];
+      sprintf(filename, "child_%d.tmp", i);
+      FILE *f = fopen(filename, "rb");
+      if (f == NULL) {
+          perror("fopen child file for reading");
+          continue;
+      }
+      fread(&local_min_max, sizeof(struct MinMax), 1, f);
+      fclose(f);
+      remove(filename);
+
     } else {
-      // read from pipes
+      if (read(pipes[i][0], &local_min_max, sizeof(struct MinMax)) == -1) {
+          perror("read from pipe");
+          continue;
+      }
+      close(pipes[i][0]);
     }
 
-    if (min < min_max.min) min_max.min = min;
-    if (max > min_max.max) min_max.max = max;
+    if (local_min_max.min < min_max.min) 
+      min_max.min = local_min_max.min;
+    if (local_min_max.max > min_max.max) 
+      min_max.max = local_min_max.max;
   }
 
   struct timeval finish_time;
@@ -146,6 +230,9 @@ int main(int argc, char **argv) {
   elapsed_time += (finish_time.tv_usec - start_time.tv_usec) / 1000.0;
 
   free(array);
+  if (!with_files) {
+    free(pipes);
+  }
 
   printf("Min: %d\n", min_max.min);
   printf("Max: %d\n", min_max.max);
