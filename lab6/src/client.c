@@ -48,15 +48,15 @@ bool ConvertStringToUI64(const char *str, uint64_t *val) {
 int main(int argc, char **argv) {
   uint64_t k = -1;
   uint64_t mod = -1;
-  char servers[255] = {'\0'}; // TODO: explain why 255
+  char servers[255] = {'\0'}; // 255 - max length for a filename
 
   while (true) {
-    int current_optind = optind ? optind : 1;
-
-    static struct option options[] = {{"k", required_argument, 0, 0},
-                                      {"mod", required_argument, 0, 0},
-                                      {"servers", required_argument, 0, 0},
-                                      {0, 0, 0, 0}};
+    static struct option options[] = {
+      {"k", required_argument, 0, 0},
+      {"mod", required_argument, 0, 0},
+      {"servers", required_argument, 0, 0},
+      {0, 0, 0, 0}
+    };
 
     int option_index = 0;
     int c = getopt_long(argc, argv, "", options, &option_index);
@@ -93,8 +93,7 @@ int main(int argc, char **argv) {
   }
 
   if (k == -1 || mod == -1 || !strlen(servers)) {
-    fprintf(stderr, "Using: %s --k 1000 --mod 5 --servers /path/to/file\n",
-            argv[0]);
+    fprintf(stdout, "Usage: %s --k \"num\" --mod \"num\" --servers /path/to/file\n", argv[0]);
     return 1;
   }
 

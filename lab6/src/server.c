@@ -50,11 +50,11 @@ int main(int argc, char **argv) {
   int port = -1;
 
   while (true) {
-    int current_optind = optind ? optind : 1;
-
-    static struct option options[] = {{"port", required_argument, 0, 0},
-                                      {"tnum", required_argument, 0, 0},
-                                      {0, 0, 0, 0}};
+    static struct option options[] = {
+      {"port", required_argument, 0, 0},
+      {"tnum", required_argument, 0, 0},
+      {0, 0, 0, 0}
+    };
 
     int option_index = 0;
     int c = getopt_long(argc, argv, "", options, &option_index);
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
   }
 
   if (port == -1 || tnum == -1) {
-    fprintf(stderr, "Using: %s --port 20001 --tnum 4\n", argv[0]);
+    fprintf(stdout, "Usage: %s --port \"num\" --tnum \"num\"\n", argv[0]);
     return 1;
   }
 
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
       memcpy(&end, from_client + sizeof(uint64_t), sizeof(uint64_t));
       memcpy(&mod, from_client + 2 * sizeof(uint64_t), sizeof(uint64_t));
 
-      fprintf(stdout, "Receive: %llu %llu %llu\n", begin, end, mod);
+      fprintf(stdout, "Received: %llu %llu %llu\n", begin, end, mod);
 
       struct FactorialArgs args[tnum];
       for (uint32_t i = 0; i < tnum; i++) {
@@ -163,9 +163,8 @@ int main(int argc, char **argv) {
         args[i].end = 1;
         args[i].mod = mod;
 
-        if (pthread_create(&threads[i], NULL, ThreadFactorial,
-                           (void *)&args[i])) {
-          printf("Error: pthread_create failed!\n");
+        if (pthread_create(&threads[i], NULL, ThreadFactorial, (void *)&args[i])) {
+          fprintf(stdout, "Error: pthread_create failed!\n");
           return 1;
         }
       }
